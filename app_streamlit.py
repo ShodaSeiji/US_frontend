@@ -31,7 +31,7 @@ if st.button("Search"):
     else:
         st.write(f"🔍 Searching researchers from **{university}** related to '**{query}**'...")
 
-        api_url = "http://localhost:3000/api/search"  # バックエンドAPIのURL
+        api_url = "https://app-kenq-4.azurewebsites.net/api/search"  # バックエンドAPIのURL
         payload = {
             "country": country,
             "university": university,
