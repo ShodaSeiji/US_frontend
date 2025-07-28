@@ -13,7 +13,7 @@ on:
   workflow_dispatch:
 
 env:
-  AZURE_WEBAPP_NAME: app-kenq-frontend  # Azure App Service 名に変更
+  AZURE_WEBAPP_NAME: app-kenq-frontend
   PYTHON_VERSION: "3.10"
 
 jobs:
