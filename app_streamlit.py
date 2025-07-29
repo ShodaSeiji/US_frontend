@@ -51,8 +51,12 @@ if st.button("Search"):
                 for item in results[:display_limit]:
                     st.markdown(f"### 👨‍🔬 {item.get('name', 'No Name')}")
                     st.markdown(f"**Institution / 所属:** {item.get('institution', 'N/A')}")
-                    st.markdown(f"**関連論文数:** {item.get('paper_count', 1)} 件")
-
+                    # 🔁 ORCID出力に変更（リンク形式）
+                    orcid_url = item.get("orcid", "").strip()
+                    if orcid_url:
+                        st.markdown(f"**ORCID:** [{orcid_url}]({orcid_url})")
+                    else:
+                        st.markdown("**ORCID:** N/A")
                     with st.expander("💡 おすすめする理由を見る"):
                         reasons_displayed = False
                         for i in range(1, 4):
