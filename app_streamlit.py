@@ -30,8 +30,8 @@ if st.button("Search"):
         st.warning("研究トピックを入力してください。")
     else:
         st.write(f"🔍 Searching researchers from **{university}** related to '**{query}**'...")
-         
-        api_url = "https://app-kenq-4-hweychffaqhaf8a3.canadacentral-01.azurewebsites.net/api/search" # バックエンドAPIのURL
+
+        api_url = "https://app-kenq-4-hweychffaqhaf8a3.canadacentral-01.azurewebsites.net/api/search"  # バックエンドAPIのURL
         payload = {
             "country": country,
             "university": university,
@@ -45,17 +45,31 @@ if st.button("Search"):
 
             # 結果表示
             if results:
-                st.success("🔎 検索結果が見つかりました。")
-                for item in results[:20]:
+                display_limit = 10  # 表示件数の上限を変数化
+                st.success(f"🔎検索結果（上位 {min(display_limit, len(results))} 件）を表示します。")
+
+                for item in results[:display_limit]:
                     st.markdown(f"### 👨‍🔬 {item.get('name', 'No Name')}")
                     st.markdown(f"**Institution / 所属:** {item.get('institution', 'N/A')}")
                     st.markdown(f"**関連論文数:** {item.get('paper_count', 1)} 件")
 
                     with st.expander("💡 おすすめする理由を見る"):
-                        st.markdown(item.get("reason", "理由は見つかりませんでした。"))
-
+                        reasons_displayed = False
+                        for i in range(1, 4):
+                            title = item.get(f"reason_title_{i}", "").strip()
+                            body = item.get(f"reason_body_{i}", "").strip()
+                            if title or body:
+                                if title:
+                                    st.markdown(f"**{title}**")
+                                if body:
+                                    st.write(body)
+                                st.markdown("---")
+                                reasons_displayed = True
+                        if not reasons_displayed:
+                            st.write("理由は見つかりませんでした。")
                     st.markdown("---")
             else:
                 st.warning("該当する研究者は見つかりませんでした。")
+
         except requests.exceptions.RequestException as e:
             st.error(f"❌ APIリクエストに失敗しました: {e}")
