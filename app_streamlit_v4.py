@@ -58,7 +58,7 @@ if st.button("Search", type="primary"):
         st.write(f"🔍 Searching researchers from **{university}** related to '**{query}**'...")
 
         # ✅ バックエンドAPIのURL（本番環境に応じて変更）
-        api_url = "http://localhost:3000/api/search"
+        api_url = "https://app-kenq-4-hweychffaqhaf8a3.canadacentral-01.azurewebsites.net/api/search"
         # api_url = "http://localhost:3000/api/search"  # ローカルテスト用
         # api_url = "https://app-kenq-4-hweychffaqhaf8a3.canadacentral-01.azurewebsites.net/api/search" #本番用
         payload = {
