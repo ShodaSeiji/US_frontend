@@ -6,6 +6,7 @@ on:
       - main
     paths:
       - "app_streamlit_v4.py"
+      - "app_streamlit.py"
       - "requirements.txt"
       - "startup.sh"
       - ".github/workflows/deploy.yml"
@@ -34,42 +35,52 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Create startup script
+      - name: Verify Python files
         run: |
-          chmod +x startup.sh
-          echo "Created startup script with executable permissions"
-
-      - name: Verify files
-        run: |
-          echo "Files in directory:"
+          echo "📁 Files in directory:"
           ls -la
-          echo "Checking if app_streamlit_v4.py exists:"
+          echo "🐍 Python files:"
+          ls -la *.py || echo "No Python files found"
+          
+          # メインアプリファイルの確認
           if [ -f "app_streamlit_v4.py" ]; then
             echo "✅ app_streamlit_v4.py found"
+            MAIN_APP="app_streamlit_v4.py"
+          elif [ -f "app_streamlit.py" ]; then
+            echo "✅ app_streamlit.py found"
+            MAIN_APP="app_streamlit.py"
           else
-            echo "❌ app_streamlit_v4.py not found"
-            exit 1
-          fi
-
-      - name: Create deployment package
-        run: |
-          # requirements.txtが存在することを確認
-          if [ ! -f "requirements.txt" ]; then
-            echo "❌ requirements.txt not found"
+            echo "❌ No main Streamlit app found"
             exit 1
           fi
           
-          # 必要なファイルのみをZIPに含める
+          echo "MAIN_APP=$MAIN_APP" >> $GITHUB_ENV
+
+      - name: Test Streamlit app
+        run: |
+          echo "🧪 Testing Streamlit import..."
+          python -c "import streamlit; print(f'Streamlit version: {streamlit.__version__}')"
+          
+          echo "🧪 Testing app syntax..."
+          python -m py_compile ${{ env.MAIN_APP }}
+          echo "✅ App syntax is valid"
+
+      - name: Create deployment package
+        run: |
+          # 実行権限を設定
+          chmod +x startup.sh
+          
+          # ZIPパッケージを作成
           zip -r release.zip \
-            app_streamlit_v4.py \
+            *.py \
             requirements.txt \
             startup.sh \
             logo_kenQ.png \
             .streamlit/ \
-            -x ".git/*" ".github/*" "__pycache__/*" "*.pyc" "*.pkl" ".DS_Store" ".vscode/*"
+            -x ".git/*" ".github/*" "__pycache__/*" "*.pyc" "*.pkl" ".DS_Store" ".vscode/*" "zip.py"
           
           echo "📦 Created deployment package"
-          echo "Package contents:"
+          echo "📋 Package contents:"
           unzip -l release.zip
 
       - name: Deploy to Azure Web App
@@ -78,4 +89,3 @@ jobs:
           app-name: ${{ env.AZURE_WEBAPP_NAME }}
           publish-profile: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}
           package: release.zip
-          startup-command: 'bash startup.sh'
