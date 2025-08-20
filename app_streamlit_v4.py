@@ -671,4 +671,4 @@ with st.sidebar:
             st.markdown("- 検索結果をCSVでエクスポート")
             st.markdown("- 全研究者データを含む")
             st.markdown("- おすすめ理由も含まれます")
-            st.markdown("- 多言語対応")
+            st.markdown("- 多言語対応")# Updated 08/20/2025 14:10:29
