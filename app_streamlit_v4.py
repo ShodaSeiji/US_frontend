@@ -1,6 +1,8 @@
 import streamlit as st
 import pandas as pd
 import requests
+import io
+from datetime import datetime
 
 # ページ設定
 st.set_page_config(page_title="研Q - 海外研究者マッチング", layout="wide")
@@ -8,6 +10,12 @@ st.set_page_config(page_title="研Q - 海外研究者マッチング", layout="w
 # ✅ セッション状態で言語管理
 if 'language' not in st.session_state:
     st.session_state.language = 'ja'  # デフォルトは日本語
+
+# ✅ 検索結果をセッション状態で保存
+if 'search_results' not in st.session_state:
+    st.session_state.search_results = []
+if 'last_search_query' not in st.session_state:
+    st.session_state.last_search_query = ""
 
 # ✅ 言語設定関数
 def get_text(key):
@@ -68,7 +76,13 @@ def get_text(key):
             'performance1': '- 多層キャッシュシステム導入',
             'performance2': '- バッチ処理で高速化',
             'performance3': '- タイムアウト時間最適化',
-            'performance4': '- AI理由生成の簡潔化'
+            'performance4': '- AI理由生成の簡潔化',
+            'download_csv': '📥 CSVダウンロード',
+            'download_button': 'Download CSV',
+            'download_filename': 'harvard_researchers_{timestamp}.csv',
+            'download_success': '✅ CSVファイルをダウンロードしました',
+            'download_error': '❌ CSVダウンロードに失敗しました: {error}',
+            'no_data_download': '⚠️ ダウンロードするデータがありません。まず検索を実行してください。'
         },
         'en': {
             'title': 'International Researcher Matching - Harvard Edition',
@@ -126,10 +140,91 @@ def get_text(key):
             'performance1': '- Multi-layer caching system',
             'performance2': '- Batch processing optimization',
             'performance3': '- Optimized timeout settings',
-            'performance4': '- Streamlined AI reasoning'
+            'performance4': '- Streamlined AI reasoning',
+            'download_csv': '📥 CSV Download',
+            'download_button': 'Download CSV',
+            'download_filename': 'harvard_researchers_{timestamp}.csv',
+            'download_success': '✅ CSV file downloaded successfully',
+            'download_error': '❌ CSV download failed: {error}',
+            'no_data_download': '⚠️ No data to download. Please run a search first.'
         }
     }
     return texts.get(st.session_state.language, texts['ja']).get(key, key)
+
+# ✅ CSVデータ準備関数
+def prepare_csv_data(results, query, language='ja'):
+    """検索結果をCSV用のDataFrameに変換"""
+    if not results:
+        return None
+    
+    csv_data = []
+    for item in results:
+        # 基本情報
+        row = {
+            'Researcher Name / 研究者名': item.get('name', 'N/A'),
+            'Institution / 所属': item.get('institution', 'N/A'),
+            'Research Field / 研究分野': item.get('classified_field', 'N/A'),
+            'ORCID': item.get('orcid', 'N/A'),
+            'Publications / 論文数': item.get('works_count', 0),
+            'Citations / 被引用数': item.get('cited_by_count', 0),
+            'h-index / h指数': item.get('h_index', 0),
+            'DB Records / DBデータ': item.get('paper_data_count', 0),
+        }
+        
+        # おすすめ理由を追加
+        for i in range(1, 4):
+            title_key = f'reason_title_{i}'
+            body_key = f'reason_body_{i}'
+            
+            if language == 'en':
+                row[f'Recommendation Reason {i} Title'] = item.get(title_key, '')
+                row[f'Recommendation Reason {i} Details'] = item.get(body_key, '')
+            else:
+                row[f'おすすめ理由{i}タイトル'] = item.get(title_key, '')
+                row[f'おすすめ理由{i}詳細'] = item.get(body_key, '')
+        
+        csv_data.append(row)
+    
+    df = pd.DataFrame(csv_data)
+    
+    # メタデータを追加
+    timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    if language == 'en':
+        metadata_row = {
+            'Researcher Name / 研究者名': f'Search Query: {query}',
+            'Institution / 所属': f'Generated: {timestamp}',
+            'Research Field / 研究分野': f'Total Results: {len(results)}',
+            'ORCID': 'Language: English',
+            'Publications / 論文数': '',
+            'Citations / 被引用数': '',
+            'h-index / h指数': '',
+            'DB Records / DBデータ': '',
+        }
+    else:
+        metadata_row = {
+            'Researcher Name / 研究者名': f'検索クエリ: {query}',
+            'Institution / 所属': f'生成日時: {timestamp}',
+            'Research Field / 研究分野': f'総結果数: {len(results)}件',
+            'ORCID': '言語: 日本語',
+            'Publications / 論文数': '',
+            'Citations / 被引用数': '',
+            'h-index / h指数': '',
+            'DB Records / DBデータ': '',
+        }
+    
+    # 理由の列も空で埋める
+    for i in range(1, 4):
+        if language == 'en':
+            metadata_row[f'Recommendation Reason {i} Title'] = ''
+            metadata_row[f'Recommendation Reason {i} Details'] = ''
+        else:
+            metadata_row[f'おすすめ理由{i}タイトル'] = ''
+            metadata_row[f'おすすめ理由{i}詳細'] = ''
+    
+    # メタデータを先頭に挿入
+    df = pd.concat([pd.DataFrame([metadata_row]), df], ignore_index=True)
+    
+    return df
 
 # ✅ カスタムCSSでResearch Metricsのデザイン改善
 st.markdown("""
@@ -244,6 +339,16 @@ st.markdown("""
     background-color: #f0f8ff;
 }
 
+/* CSVダウンロードボタンのスタイル */
+.download-section {
+    background-color: #e8f5e8;
+    border: 1px solid #28a745;
+    border-radius: 8px;
+    padding: 15px;
+    margin: 15px 0;
+    text-align: center;
+}
+
 /* レスポンシブデザイン対応 */
 @media (max-width: 768px) {
     .researcher-name {
@@ -328,6 +433,49 @@ with st.expander(get_text('detailed_filter')):
 # Step 5: 表示件数の選択
 display_limit = st.selectbox(get_text('num_results'), [5, 10, 20, 50], index=1)
 
+# ✅ CSVダウンロードセクション（検索結果がある場合のみ表示）
+if st.session_state.search_results:
+    st.markdown('<div class="download-section">', unsafe_allow_html=True)
+    st.markdown(f"### {get_text('download_csv')}")
+    
+    col1, col2, col3 = st.columns([1, 2, 1])
+    with col2:
+        if st.button(get_text('download_button'), type="secondary", use_container_width=True):
+            try:
+                # CSVデータの準備
+                csv_df = prepare_csv_data(
+                    st.session_state.search_results, 
+                    st.session_state.last_search_query,
+                    st.session_state.language
+                )
+                
+                if csv_df is not None:
+                    # CSVとしてエンコード
+                    csv_buffer = io.StringIO()
+                    csv_df.to_csv(csv_buffer, index=False, encoding='utf-8-sig')
+                    csv_data = csv_buffer.getvalue()
+                    
+                    # ファイル名の生成
+                    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+                    filename = get_text('download_filename').format(timestamp=timestamp)
+                    
+                    # ダウンロードボタン
+                    st.download_button(
+                        label=f"📥 {filename}",
+                        data=csv_data,
+                        file_name=filename,
+                        mime="text/csv",
+                        use_container_width=True
+                    )
+                    st.success(get_text('download_success'))
+                else:
+                    st.error(get_text('no_data_download'))
+                    
+            except Exception as e:
+                st.error(get_text('download_error').format(error=str(e)))
+    
+    st.markdown('</div>', unsafe_allow_html=True)
+
 # Step 6: 検索処理
 if st.button(get_text('search_button'), type="primary"):
     if not query.strip():
@@ -352,6 +500,10 @@ if st.button(get_text('search_button'), type="primary"):
 
             # 結果表示
             if results:
+                # ✅ 検索結果をセッション状態に保存
+                st.session_state.search_results = results
+                st.session_state.last_search_query = query
+                
                 # ✅ フィルタリング（フロントエンド側）
                 filtered_results = []
                 for item in results:
@@ -470,6 +622,8 @@ if st.button(get_text('search_button'), type="primary"):
                         
             else:
                 st.warning(get_text('no_results'))
+                # 結果がない場合はセッション状態をクリア
+                st.session_state.search_results = []
 
         except requests.exceptions.Timeout:
             st.error(get_text('timeout_error'))
@@ -504,3 +658,17 @@ with st.sidebar:
     st.markdown(get_text('performance2'))
     st.markdown(get_text('performance3'))
     st.markdown(get_text('performance4'))
+    
+    # ✅ CSVダウンロード機能の説明
+    if st.session_state.search_results:
+        st.markdown("## 📥 CSV Export")
+        if st.session_state.language == 'en':
+            st.markdown("- Export search results to CSV")
+            st.markdown("- Includes all researcher data")
+            st.markdown("- Contains recommendation reasons")
+            st.markdown("- Multi-language support")
+        else:
+            st.markdown("- 検索結果をCSVでエクスポート")
+            st.markdown("- 全研究者データを含む")
+            st.markdown("- おすすめ理由も含まれます")
+            st.markdown("- 多言語対応")
