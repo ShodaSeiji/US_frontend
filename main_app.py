@@ -1,231 +1,392 @@
-import streamlit as st
+def researcher_search_page():
+    """研究者検索ページ"""
+    st.title("🔍 研究者検索 - Harvard Edition")
+
+    # Step 1: 国の選択（現在はUnited States固定）
+    country = st.selectbox("Select Country / 国を選んでください", ["United States"])
+
+    # Step 2: 所属大学の選択
+    universities = [
+        "All",
+        "Harvard University",
+        "Harvard Medical School",
+        "Harvard Kennedy School",
+        "Harvard T.H. Chan School of Public Health",
+        "Harvard Business School",
+        "Harvard School of Engineering and Applied Sciences",
+        "Harvard Divinity School",
+        "Harvard Graduate School of Education",
+        "Harvard Law School"
+    ]
+    university = st.selectbox("Select Institution / 所属を選んでください", universities)
+    selected_university = "" if university == "All" else university.strip()
+
+    # Step 3: 研究トピックの入力
+    query = st.text_input("Research Topic / 研究トピックを入力", key="research_query")
+
+    # Step 4: 詳細フィルター
+    with st.expander("🔍 詳細フィルター（オプション）"):
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            min_works = st.number_input("最小論文数", min_value=0, value=0, step=10)
+            min_citations = st.number_input("最小被引用数", min_value=0, value=0, step=100)
+        
+        with col2:
+            min_h_index = st.number_input("最小h指数", min_value=0, value=0, step=5)
+            research_fields = st.multiselect(
+                "研究分野",
+                ["Arts_Sciences", "Medical", "Engineering", "Business", "Law", "Education"],
+                default=[]
+            )
+
+    # Step 5: 表示件数の選択
+    display_limit = st.selectbox("表示件数", [5, 10, 20, 50], index=1)
+
+    # Step 6: 検索処理
+    if st.button("Search", type="primary"):
+        if not query.strip():
+            st.warning("研究トピックを入力してください。")
+        else:
+            st.write(f"🔍 Searching researchers from **{university}** related to '**{query}**'...")
+
+            # バックエンドAPIのURL
+            api_url = "https://app-kenq-4-hweychffaqhaf8a3.canadacentral-01.azurewebsites.net/api/search"
+            payload = {
+                "country": country,
+                "university": selected_university,
+                "query": query
+            }
+
+            try:
+                with st.spinner('検索中...'):
+                    response = requests.post(api_url, json=payload, timeout=30)
+                    response.raise_for_status()
+                    results = response.json()
+
+                # 結果表示
+                if results:
+                    # フィルタリング（フロントエンド側）
+                    filtered_results = []
+                    for item in results:
+                        # 論文数フィルター
+                        if min_works > 0 and item.get('works_count', 0) < min_works:
+                            continue
+                        # 被引用数フィルター
+                        if min_citations > 0 and item.get('cited_by_count', 0) < min_citations:
+                            continue
+                        # h指数フィルター
+                        if min_h_index > 0 and item.get('h_index', 0) < min_h_index:
+                            continue
+                        # 研究分野フィルター
+                        if research_fields and item.get('classified_field', '') not in research_fields:
+                            continue
+                        
+                        filtered_results.append(item)
+
+                    # 表示件数制限
+                    display_results = filtered_results[:display_limit]
+                    
+                    if display_results:
+                        st.success(f"🔎検索結果（{len(display_results)}件 / 全{len(results)}件中）を表示します。")
+                        
+                        # 統計情報の表示
+                        if len(results) > 1:
+                            avg_works = sum(item.get('works_count', 0) for item in results) / len(results)
+                            avg_citations = sum(item.get('cited_by_count', 0) for item in results) / len(results)
+                            avg_h_index = sum(item.get('h_index', 0) for item in results) / len(results)
+                            
+                            with st.expander("📊 検索結果統計"):
+                                col1, col2, col3 = st.columns(3)
+                                col1.metric("平均論文数", f"{avg_works:.0f}件")
+                                col2.metric("平均被引用数", f"{avg_citations:.0f}回")
+                                col3.metric("平均h指数", f"{avg_h_index:.1f}")
+
+                        # 研究者情報の表示
+                        for i, item in enumerate(display_results, 1):
+                            st.markdown("---")
+                            
+                            # 研究者基本情報
+                            col1, col2 = st.columns([2, 1])
+                            
+                            with col1:
+                                st.markdown(f"### 👨‍🔬 {item.get('name', 'No Name')}")
+                                st.markdown(f"**Institution / 所属:** {item.get('institution', 'N/A')}")
+                                st.markdown(f"**Research Field / 研究分野:** {item.get('classified_field', 'N/A')}")
+
+                                orcid_url = item.get("orcid", "").strip()
+                                if orcid_url and orcid_url != "N/A":
+                                    if not orcid_url.startswith("http"):
+                                        orcid_url = f"https://orcid.org/{orcid_url}"
+                                    st.markdown(f"**ORCID:** [{orcid_url}]({orcid_url})")
+                                else:
+                                    st.markdown("**ORCID:** N/A")
+                            
+                            with col2:
+                                # 研究実績メトリクス
+                                st.markdown("**📈 Research Metrics**")
+                                
+                                # works_countとpaper_countの両方に対応
+                                works_count = item.get('works_count', item.get('paper_count', 0))
+                                st.metric("論文数", f"{works_count:,}件")
+                                st.metric("被引用数", f"{item.get('cited_by_count', 0):,}回")
+                                st.metric("h指数", item.get('h_index', 0))
+                                
+                                # CSVデータでの論文件数も表示
+                                if item.get('paper_data_count'):
+                                    st.caption(f"データベース収録論文: {item.get('paper_data_count')}件")
+
+                            # おすすめ理由の表示
+                            with st.expander("💡 おすすめする理由を見る", expanded=False):
+                                reasons_displayed = False
+                                for j in range(1, 4):
+                                    title = item.get(f"reason_title_{j}", "").strip()
+                                    body = item.get(f"reason_body_{j}", "").strip()
+                                    if title or body:
+                                        if title:
+                                            st.markdown(f"**🎯 理由{j}: {title}**")
+                                        if body:
+                                            st.write(body)
+                                        if j < 3:  # 最後以外は区切り線
+                                            st.markdown("---")
+                                        reasons_displayed = True
+                                if not reasons_displayed:
+                                    st.write("理由は見つかりませんでした。")
+                    
+                    else:
+                        st.warning("フィルター条件に一致する研究者は見つかりませんでした。条件を緩めて再検索してください。")
+                        
+                        # フィルター前の件数を表示
+                        if len(results) > 0:
+                            st.info(f"フィルター適用前は{len(results)}件の結果がありました。")
+                            
+                else:
+                    st.warning("該当する研究者は見つかりませんでした。")
+
+            except requests.exceptions.Timeout:
+                st.error("⏰ 検索がタイムアウトしました。しばらく待ってから再度お試しください。")
+            except requests.exceptions.RequestException as e:
+                st.error(f"❌ APIリクエストに失敗しました: {e}")
+            except Exception as e:
+                st.error(f"❌ 予期しないエラーが発生しました: {e}")
+
+def chat_agent_page():
+    """チャットエージェントページ"""
+    st.title("🤖 Chat Agent - AI研究者マッチング")
+    
+    st.info("💡 この機能は現在開発中です。しばらくお待ちください。")
+    
+    st.markdown("""
+    ### 🚀 予定機能
+    - 自然言語での研究者検索
+    - コンテキスト理解による対話
+    - パーソナライズされた提案
+    - リアルタイム質疑応答
+    """)
+    
+    # 仮のチャットインターフェース
+    st.text_area("研究ニーズを自然言語で入力してください:", 
+                placeholder="例: 機械学習を使った医療診断の研究をしているHarvardの研究者を探しています...",
+                height=100)
+    
+    if st.button("AIに相談する", type="primary"):
+        st.warning("この機能は準備中です。現在は「🔍 Researcher Search」をご利用ください。")import streamlit as st
+import pandas as pd
+import requests
 
 # ページ設定
-st.set_page_config(
-    page_title="研Q - 海外研究者マッチング",
-    page_icon="🎓",
-    layout="wide",
-    initial_sidebar_state="expanded"
-)
+st.set_page_config(page_title="研Q - 海外研究者マッチング", layout="wide")
 
-# カスタムCSS
-st.markdown("""
-<style>
-.main-header {
-    background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
-    padding: 2rem;
-    border-radius: 10px;
-    margin-bottom: 2rem;
-    color: white;
-    text-align: center;
-}
+# ロゴの表示（ファイルが存在する場合のみ）
+try:
+    st.image("logo_kenQ.png", width=250)
+except:
+    st.title("研Q - 海外研究者マッチング")
 
-.feature-card {
-    background-color: white;
-    padding: 1.5rem;
-    border-radius: 10px;
-    border: 1px solid #e0e0e0;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-    margin: 1rem 0;
-    transition: transform 0.2s;
-}
+st.title("海外研究者マッチング - Harvard Edition")
 
-.feature-card:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 4px 8px rgba(0,0,0,0.15);
-}
+# Step 1: 国の選択（現在はUnited States固定）
+country = st.selectbox("Select Country / 国を選んでください", ["United States"])
 
-.status-card {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    color: white;
-    padding: 1rem;
-    border-radius: 8px;
-    margin: 0.5rem 0;
-    text-align: center;
-}
+# Step 2: 所属大学の選択
+universities = [
+    "All",
+    "Harvard University",
+    "Harvard Medical School",
+    "Harvard Kennedy School",
+    "Harvard T.H. Chan School of Public Health",
+    "Harvard Business School",
+    "Harvard School of Engineering and Applied Sciences",
+    "Harvard Divinity School",
+    "Harvard Graduate School of Education",
+    "Harvard Law School"
+]
+university = st.selectbox("Select Institution / 所属を選んでください", universities)
+selected_university = "" if university == "All" else university.strip()
 
-.version-info {
-    background-color: #f8f9fa;
-    padding: 1rem;
-    border-radius: 8px;
-    border-left: 4px solid #007acc;
-    margin: 1rem 0;
-}
-</style>
-""", unsafe_allow_html=True)
+# Step 3: 研究トピックの入力
+query = st.text_input("Research Topic / 研究トピックを入力", key="research_query")
 
-# ロゴ表示
-st.markdown("### 🎓 研Q")
+# ✅ Step 4: 詳細フィルター（新機能）
+with st.expander("🔍 詳細フィルター（オプション）"):
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        min_works = st.number_input("最小論文数", min_value=0, value=0, step=10)
+        min_citations = st.number_input("最小被引用数", min_value=0, value=0, step=100)
+    
+    with col2:
+        min_h_index = st.number_input("最小h指数", min_value=0, value=0, step=5)
+        research_fields = st.multiselect(
+            "研究分野",
+            ["Arts_Sciences", "Medical", "Engineering", "Business", "Law", "Education"],
+            default=[]
+        )
 
-# メインヘッダー
-st.markdown("""
-<div class="main-header">
-    <h1>🎓 研Q - 海外研究者マッチングプラットフォーム</h1>
-    <p>Harvard Edition - 企業の研究ニーズに最適な海外研究者を見つける</p>
-</div>
-""", unsafe_allow_html=True)
+# Step 5: 表示件数の選択
+display_limit = st.selectbox("表示件数", [5, 10, 20, 50], index=1)
 
-st.markdown("## 🌟 利用可能な機能")
+# Step 6: 検索処理
+if st.button("Search", type="primary"):
+    if not query.strip():
+        st.warning("研究トピックを入力してください。")
+    else:
+        st.write(f"🔍 Searching researchers from **{university}** related to '**{query}**'...")
 
-col1, col2 = st.columns(2)
+        # バックエンドAPIのURL
+        api_url = "https://app-kenq-4-hweychffaqhaf8a3.canadacentral-01.azurewebsites.net/api/search"
+        payload = {
+            "country": country,
+            "university": selected_university,
+            "query": query
+        }
 
-with col1:
-    st.markdown("""
-    <div class="feature-card">
-        <h3>🔍 研究者検索</h3>
-        <p>キーワードベースの高精度検索で、Harvard大学関連の研究者を効率的に発見できます。</p>
-        <ul>
-            <li>ベクトル検索による意味的マッチング</li>
-            <li>詳細フィルタリング機能</li>
-            <li>研究実績メトリクス表示</li>
-            <li>おすすめ理由の自動生成</li>
-            <li>CSVエクスポート機能</li>
-            <li>多言語対応（日本語・英語）</li>
-        </ul>
-        <p><strong>👈 左サイドバーから「🔍 Researcher Search」を選択してください</strong></p>
-    </div>
-    """, unsafe_allow_html=True)
+        try:
+            with st.spinner('検索中...'):
+                response = requests.post(api_url, json=payload, timeout=30)
+                response.raise_for_status()
+                results = response.json()
 
-with col2:
-    st.markdown("""
-    <div class="feature-card">
-        <h3>🤖 対話型エージェント</h3>
-        <p>AIエージェントとの対話を通じて、最適な研究者を発見できる新機能です。</p>
-        <ul>
-            <li>自然言語での要求定義</li>
-            <li>コンテキスト理解による提案</li>
-            <li>段階的な情報収集</li>
-            <li>パーソナライズされた推薦</li>
-            <li>リアルタイム対話</li>
-            <li>多言語対応（日本語・英語）</li>
-        </ul>
-        <p><strong>👈 左サイドバーから「🤖 Chat Agent」を選択してください</strong></p>
-    </div>
-    """, unsafe_allow_html=True)
+            # 結果表示
+            if results:
+                # フィルタリング（フロントエンド側）
+                filtered_results = []
+                for item in results:
+                    # 論文数フィルター
+                    if min_works > 0 and item.get('works_count', 0) < min_works:
+                        continue
+                    # 被引用数フィルター
+                    if min_citations > 0 and item.get('cited_by_count', 0) < min_citations:
+                        continue
+                    # h指数フィルター
+                    if min_h_index > 0 and item.get('h_index', 0) < min_h_index:
+                        continue
+                    # 研究分野フィルター
+                    if research_fields and item.get('classified_field', '') not in research_fields:
+                        continue
+                    
+                    filtered_results.append(item)
 
-st.markdown("---")
+                # 表示件数制限
+                display_results = filtered_results[:display_limit]
+                
+                if display_results:
+                    st.success(f"🔎検索結果（{len(display_results)}件 / 全{len(results)}件中）を表示します。")
+                    
+                    # 統計情報の表示
+                    if len(results) > 1:
+                        avg_works = sum(item.get('works_count', 0) for item in results) / len(results)
+                        avg_citations = sum(item.get('cited_by_count', 0) for item in results) / len(results)
+                        avg_h_index = sum(item.get('h_index', 0) for item in results) / len(results)
+                        
+                        with st.expander("📊 検索結果統計"):
+                            col1, col2, col3 = st.columns(3)
+                            col1.metric("平均論文数", f"{avg_works:.0f}件")
+                            col2.metric("平均被引用数", f"{avg_citations:.0f}回")
+                            col3.metric("平均h指数", f"{avg_h_index:.1f}")
 
-# システム情報（本番環境用）
-st.markdown("## 📊 システム情報")
+                    # 研究者情報の表示
+                    for i, item in enumerate(display_results, 1):
+                        st.markdown("---")
+                        
+                        # 研究者基本情報
+                        col1, col2 = st.columns([2, 1])
+                        
+                        with col1:
+                            st.markdown(f"### 👨‍🔬 {item.get('name', 'No Name')}")
+                            st.markdown(f"**Institution / 所属:** {item.get('institution', 'N/A')}")
+                            st.markdown(f"**Research Field / 研究分野:** {item.get('classified_field', 'N/A')}")
 
-col1, col2, col3, col4 = st.columns(4)
+                            orcid_url = item.get("orcid", "").strip()
+                            if orcid_url and orcid_url != "N/A":
+                                if not orcid_url.startswith("http"):
+                                    orcid_url = f"https://orcid.org/{orcid_url}"
+                                st.markdown(f"**ORCID:** [{orcid_url}]({orcid_url})")
+                            else:
+                                st.markdown("**ORCID:** N/A")
+                        
+                        with col2:
+                            # 研究実績メトリクス
+                            st.markdown("**📈 Research Metrics**")
+                            
+                            # works_countとpaper_countの両方に対応
+                            works_count = item.get('works_count', item.get('paper_count', 0))
+                            st.metric("論文数", f"{works_count:,}件")
+                            st.metric("被引用数", f"{item.get('cited_by_count', 0):,}回")
+                            st.metric("h指数", item.get('h_index', 0))
+                            
+                            # CSVデータでの論文件数も表示
+                            if item.get('paper_data_count'):
+                                st.caption(f"データベース収録論文: {item.get('paper_data_count')}件")
 
-with col1:
-    st.markdown("""
-    <div class="status-card">
-        <h4>🚀 システム状態</h4>
-        <p>運用中</p>
-    </div>
-    """, unsafe_allow_html=True)
+                        # おすすめ理由の表示
+                        with st.expander("💡 おすすめする理由を見る", expanded=False):
+                            reasons_displayed = False
+                            for j in range(1, 4):
+                                title = item.get(f"reason_title_{j}", "").strip()
+                                body = item.get(f"reason_body_{j}", "").strip()
+                                if title or body:
+                                    if title:
+                                        st.markdown(f"**🎯 理由{j}: {title}**")
+                                    if body:
+                                        st.write(body)
+                                    if j < 3:  # 最後以外は区切り線
+                                        st.markdown("---")
+                                    reasons_displayed = True
+                            if not reasons_displayed:
+                                st.write("理由は見つかりませんでした。")
+                
+                else:
+                    st.warning("フィルター条件に一致する研究者は見つかりませんでした。条件を緩めて再検索してください。")
+                    
+                    # フィルター前の件数を表示
+                    if len(results) > 0:
+                        st.info(f"フィルター適用前は{len(results)}件の結果がありました。")
+                        
+            else:
+                st.warning("該当する研究者は見つかりませんでした。")
 
-with col2:
-    st.markdown("""
-    <div class="status-card">
-        <h4>🔍 検索エンジン</h4>
-        <p>Azure AI Search</p>
-    </div>
-    """, unsafe_allow_html=True)
+        except requests.exceptions.Timeout:
+            st.error("⏰ 検索がタイムアウトしました。しばらく待ってから再度お試しください。")
+        except requests.exceptions.RequestException as e:
+            st.error(f"❌ APIリクエストに失敗しました: {e}")
+        except Exception as e:
+            st.error(f"❌ 予期しないエラーが発生しました: {e}")
 
-with col3:
-    st.markdown("""
-    <div class="status-card">
-        <h4>🤖 AI エンジン</h4>
-        <p>Azure OpenAI</p>
-    </div>
-    """, unsafe_allow_html=True)
-
-with col4:
-    st.markdown("""
-    <div class="status-card">
-        <h4>🌐 言語対応</h4>
-        <p>日本語・English</p>
-    </div>
-    """, unsafe_allow_html=True)
-
-st.markdown("---")
-
-# バージョン情報
-st.markdown("""
-<div class="version-info">
-    <h4>📋 最新バージョン情報</h4>
-    <ul>
-        <li><strong>Version 4.4.0</strong> - 多言語対応 & CSVダウンロード機能</li>
-        <li><strong>新機能:</strong> 日本語・英語の切り替え対応</li>
-        <li><strong>改善:</strong> 研究者数選択機能（1-10名）</li>
-        <li><strong>改善:</strong> 詳細な推薦理由表示（400ワード程度）</li>
-        <li><strong>新機能:</strong> 動的プレースホルダー対応</li>
-        <li><strong>新機能:</strong> 完全なCSVエクスポート機能</li>
-    </ul>
-</div>
-""", unsafe_allow_html=True)
-
-st.markdown("## 🎯 利用手順")
-
-col1, col2, col3 = st.columns(3)
-
-with col1:
-    st.markdown("""
-    **🔍 研究者を検索する**
-    1. 左サイドバーから「Researcher Search」を選択
-    2. 研究トピックまたはキーワードを入力
-    3. 必要に応じてフィルターを設定
-    4. 検索実行して結果を確認
-    5. CSVでデータをダウンロード
-    """)
-
-with col2:
-    st.markdown("""
-    **🤖 AIエージェントと対話する**
-    1. 左サイドバーから「Chat Agent」を選択
-    2. 自然言語で研究ニーズを入力
-    3. AIとの対話で要件を明確化
-    4. 最適な研究者の提案を受け取る
-    5. 詳細な推薦理由を確認
-    """)
-
-with col3:
-    st.markdown("""
-    **⚙️ 機能をカスタマイズする**
-    1. 言語を選択（日本語・English）
-    2. 表示する研究者数を調整
-    3. 詳細フィルターを活用
-    4. 結果をCSVでエクスポート
-    5. 推薦理由の詳細を確認
-    """)
-
-st.markdown("---")
-
-# サイドバー情報
+# サイドバーに情報を追加
 with st.sidebar:
-    st.markdown("## 🎓 研Q について")
-    st.markdown("海外研究者マッチングプラットフォーム")
-    st.markdown("- **対象**: Harvard University関連研究者")
-    st.markdown("- **データソース**: 論文データベース + 研究者情報")
-    st.markdown("- **AI技術**: Azure OpenAI + Azure AI Search")
+    st.markdown("## 📊 システム情報")
+    st.markdown("- **データベース**: Harvard研究者データ")
+    st.markdown("- **インデックス**: harvard-index-v6")
+    st.markdown("- **検索エンジン**: Azure AI Search")
+    st.markdown("- **AI**: Azure OpenAI")
     
-    st.markdown("## 🌟 主要機能")
-    st.markdown("✅ **高精度ベクトル検索**")
-    st.markdown("✅ **AI推薦理由生成**")
-    st.markdown("✅ **多言語対応**")
-    st.markdown("✅ **CSVエクスポート**")
-    st.markdown("✅ **対話型エージェント**")
-    st.markdown("✅ **リアルタイム検索**")
+    st.markdown("## 🔍 検索のコツ")
+    st.markdown("- 英語・日本語どちらでも検索可能")
+    st.markdown("- 具体的なキーワードを使用")
+    st.markdown("- 詳細フィルターで絞り込み可能")
     
-    st.markdown("## 📊 検索対象データ")
-    st.markdown("- **研究者数**: 数千名以上")
-    st.markdown("- **論文データ**: 最新の研究成果")
-    st.markdown("- **所属機関**: Harvard関連組織")
-    st.markdown("- **更新頻度**: 定期的に更新")
-    
-    st.markdown("## 🔗 サポート")
-    st.markdown("技術的な質問やフィードバックは")
-    st.markdown("システム管理者までお問い合わせください。")
-
-# フッター
-st.markdown("---")
-st.markdown("""
-<div style="text-align: center; color: #666; padding: 20px;">
-    <p>© 2025 研Q (KenQ) - Harvard Researcher Matching Platform</p>
-    <p>Powered by Azure AI Services | Built with Streamlit</p>
-</div>
-""", unsafe_allow_html=True)
+    st.markdown("## 📈 表示される指標")
+    st.markdown("- **論文数**: 研究者の総論文数")
+    st.markdown("- **被引用数**: 論文の被引用回数")
+    st.markdown("- **h指数**: 研究影響力の指標")
