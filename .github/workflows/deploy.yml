@@ -5,12 +5,8 @@ on:
     branches:
       - main
     paths:
-      - "app_streamlit_v4.py"
-      - "app_streamlit.py"
-      - "requirements.txt"
-      - "startup.sh"
+      - "US_frontend/**"
       - ".github/workflows/deploy.yml"
-      - "**/*.py"
   workflow_dispatch:
 
 env:
@@ -30,58 +26,69 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
-      - name: Install dependencies
+      - name: Navigate to US_frontend and verify structure
         run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
-
-      - name: Verify Python files
-        run: |
-          echo "📁 Files in directory:"
+          cd US_frontend
+          echo "📁 US_frontend directory contents:"
           ls -la
           echo "🐍 Python files:"
-          ls -la *.py || echo "No Python files found"
+          find . -name "*.py" -type f
+          echo "📂 Pages directory:"
+          ls -la pages/ || echo "❌ pages directory not found"
           
           # メインアプリファイルの確認
-          if [ -f "app_streamlit_v4.py" ]; then
-            echo "✅ app_streamlit_v4.py found"
-            MAIN_APP="app_streamlit_v4.py"
-          elif [ -f "app_streamlit.py" ]; then
-            echo "✅ app_streamlit.py found"
-            MAIN_APP="app_streamlit.py"
+          if [ -f "main_app.py" ]; then
+            echo "✅ main_app.py found"
           else
-            echo "❌ No main Streamlit app found"
+            echo "❌ main_app.py not found"
             exit 1
           fi
           
-          echo "MAIN_APP=$MAIN_APP" >> $GITHUB_ENV
+          # pages ディレクトリの確認
+          if [ -d "pages" ] && [ -f "pages/1_Researcher_Search.py" ] && [ -f "pages/2_Chat_Agent.py" ]; then
+            echo "✅ pages directory structure is correct"
+          else
+            echo "❌ pages directory structure is incorrect"
+            exit 1
+          fi
+
+      - name: Install dependencies
+        run: |
+          cd US_frontend
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
 
       - name: Test Streamlit app
         run: |
+          cd US_frontend
           echo "🧪 Testing Streamlit import..."
           python -c "import streamlit; print(f'Streamlit version: {streamlit.__version__}')"
           
-          echo "🧪 Testing app syntax..."
-          python -m py_compile ${{ env.MAIN_APP }}
-          echo "✅ App syntax is valid"
+          echo "🧪 Testing main app syntax..."
+          python -m py_compile main_app.py
+          
+          echo "🧪 Testing page files syntax..."
+          python -m py_compile pages/1_Researcher_Search.py
+          python -m py_compile pages/2_Chat_Agent.py
+          
+          echo "✅ All files syntax is valid"
 
-      - name: Create deployment package
+      - name: Create deployment package from US_frontend
         run: |
+          cd US_frontend
+          
           # 実行権限を設定
           chmod +x startup.sh
           
-          # ZIPパッケージを作成
-          zip -r release.zip \
-            *.py \
-            requirements.txt \
-            startup.sh \
-            logo_kenQ.png \
-            .streamlit/ \
+          # ZIPパッケージを作成（US_frontendの内容のみ）
+          zip -r ../release.zip \
+            . \
             -x ".git/*" ".github/*" "__pycache__/*" "*.pyc" "*.pkl" ".DS_Store" ".vscode/*" "zip.py"
           
-          echo "📦 Created deployment package"
+          cd ..
+          echo "📦 Created deployment package from US_frontend"
           echo "📋 Package contents:"
-          unzip -l release.zip
+          unzip -l release.zip | head -20
 
       - name: Deploy to Azure Web App
         uses: azure/webapps-deploy@v3
