@@ -64,11 +64,11 @@ with st.sidebar:
     
     # 研究者検索ページへのリンク
     if st.button("🔍 Researcher Search", use_container_width=True, help="キーワードベースの高精度研究者検索"):
-        st.switch_page("pages/1_🔍_Researcher_Search.py")
+        st.switch_page("pages/1_Researcher_Search.py")
     
     # チャットエージェントページへのリンク  
     if st.button("🤖 Chat Agent", use_container_width=True, help="AI対話型研究者マッチング"):
-        st.switch_page("pages/2_🤖_Chat_Agent.py")
+        st.switch_page("pages/2_Chat_Agent.py")
     
     st.markdown("---")
     
