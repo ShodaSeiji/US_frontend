@@ -5,7 +5,10 @@ on:
     branches:
       - main
     paths:
-      - "US_frontend/**"
+      - "pages/**"
+      - "*.py"
+      - "requirements.txt"
+      - "startup.sh"
       - ".github/workflows/deploy.yml"
   workflow_dispatch:
 
@@ -26,27 +29,27 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
-      - name: Verify US_frontend structure
+      - name: Verify project structure
         run: |
-          echo "Repository root:"
+          echo "Repository root contents:"
           ls -la
-          echo "US_frontend directory:"
-          ls -la US_frontend/
-          echo "US_frontend pages:"
-          ls -la US_frontend/pages/
+          echo "Pages directory:"
+          ls -la pages/ || echo "No pages directory found"
+          echo "Python files in root:"
+          ls -la *.py || echo "No Python files in root"
 
       - name: Install dependencies
         run: |
-          cd US_frontend
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Package US_frontend contents only
+      - name: Make startup script executable
         run: |
-          cd US_frontend
-          chmod +x startup.sh
-          zip -r ../release.zip . -x ".git/*" ".github/*" "__pycache__/*"
-          cd ..
+          chmod +x startup.sh || echo "startup.sh not found, skipping"
+
+      - name: Package application
+        run: |
+          zip -r release.zip . -x ".git/*" ".github/*" "__pycache__/*" "*.pyc"
           echo "Package contents:"
           unzip -l release.zip | head -20
 
