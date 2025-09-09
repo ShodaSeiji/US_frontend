@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import requests
 import io
+import os
 from datetime import datetime
 
 # ページ設定
@@ -150,6 +151,17 @@ def get_text(key):
         }
     }
     return texts.get(st.session_state.language, texts['ja']).get(key, key)
+
+# 安全なページ遷移関数を追加
+def safe_navigate_to_page(page_name, possible_paths):
+    for path in possible_paths:
+        if os.path.exists(path):
+            try:
+                st.switch_page(path)
+                return
+            except Exception as e:
+                continue
+    st.error(f"❌ {page_name}ページが見つかりません")
 
 # ✅ CSVデータ準備関数
 def prepare_csv_data(results, query, language='ja'):
@@ -634,8 +646,30 @@ if st.button(get_text('search_button'), type="primary"):
         except Exception as e:
             st.error(get_text('unexpected_error').format(error=str(e)))
 
-# ✅ サイドバーに情報を追加（多言語対応）
+# サイドバー（ナビゲーション付き）
 with st.sidebar:
+    # ナビゲーションセクション
+    st.markdown("## 🧭 ナビゲーション")
+    
+    # ホームページへのリンク
+    if st.button("🏠 ホーム", use_container_width=True, help="トップページに戻る"):
+        try:
+            st.switch_page("main_app.py")
+        except:
+            safe_navigate_to_page("ホーム", ["main_app.py", "app.py", "Home.py"])
+    
+    # チャットエージェントへのリンク
+    if st.button("🤖 Chat Agent", use_container_width=True, help="AI対話型研究者マッチング"):
+        safe_navigate_to_page("チャットエージェント", [
+            "pages/2_Chat_Agent.py",
+            "2_Chat_Agent.py",
+            "pages/Chat_Agent.py",
+            "Chat_Agent.py"
+        ])
+    
+    st.markdown("---")
+    
+    # 既存のシステム情報
     st.markdown(get_text('system_info'))
     st.markdown(f"- {get_text('database')}")
     st.markdown(f"- {get_text('index')}")

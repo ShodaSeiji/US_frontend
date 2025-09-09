@@ -4,6 +4,7 @@ import json
 from datetime import datetime
 import re
 import pandas as pd
+import os
 import io
 
 # ページ設定
@@ -140,6 +141,18 @@ def create_csv_from_researchers(researchers):
     df.to_csv(csv_buffer, index=False, encoding='utf-8-sig')
     
     return csv_buffer.getvalue()
+
+# 安全なページ遷移関数を追加
+def safe_navigate_to_page(page_name, possible_paths):
+    for path in possible_paths:
+        if os.path.exists(path):
+            try:
+                st.switch_page(path)
+                return
+            except Exception as e:
+                continue
+    st.error(f"❌ {page_name}ページが見つかりません")
+
 
 # 🔧 動的プレースホルダー生成関数（多言語対応）
 def get_dynamic_placeholder():
@@ -524,102 +537,68 @@ if send_button and user_input.strip():
     
     st.rerun()
 
-# サイドバー - システム情報とコンテキスト（多言語対応）
+# サイドバー（ナビゲーション付き）
 with st.sidebar:
-    st.markdown(f"## {get_text('system_info')}")
-    st.markdown(f"**API URL:** {API_BASE_URL}")
-    st.markdown("**バージョン:** 4.4.0 (多言語対応＆CSVダウンロード)")
+    # ナビゲーションセクション
+    st.markdown("## 🧭 ナビゲーション")
     
-    # API状態表示
-    try:
-        health_response = requests.get(f"{API_BASE_URL}/api/health", timeout=5)
-        if health_response.status_code == 200:
-            st.success("🟢 API Online")
-        else:
-            st.error("🔴 API Error")
-    except:
-        st.error("🔴 API Offline")
+    # ホームページへのリンク
+    if st.button("🏠 ホーム", use_container_width=True, help="トップページに戻る"):
+        try:
+            st.switch_page("main_app.py")
+        except:
+            safe_navigate_to_page("ホーム", ["main_app.py", "app.py", "Home.py"])
+    
+    # 研究者検索へのリンク
+    if st.button("🔍 Researcher Search", use_container_width=True, help="キーワードベースの高精度研究者検索"):
+        safe_navigate_to_page("研究者検索", [
+            "pages/1_Researcher_Search.py",
+            "1_Researcher_Search.py",
+            "pages/Researcher_Search.py",
+            "Researcher_Search.py"
+        ])
     
     st.markdown("---")
-    st.markdown(f"## {get_text('display_settings')}")
-    st.markdown(f"**{get_text('researcher_count').replace(':', '')}:** {st.session_state.max_researchers}名")
-    st.markdown(f"**Language / 言語:** {st.session_state.language}")
+    
+    # Chat Agent固有の情報
+    st.markdown("## 🤖 Chat Agentについて")
+    st.markdown("AIエージェントと自然言語で対話しながら、最適な研究者を見つけることができます。")
+    
+    st.markdown("### 💡 使い方のコツ")
+    st.markdown("- 具体的な研究分野を入力")
+    st.markdown("- 「機械学習の専門家」など専門性を指定")
+    st.markdown("- 「バイオインフォマティクス」など技術分野を指定")
+    st.markdown("- 日本語・英語どちらでも対話可能")
+    
+    st.markdown("### 📝 入力例")
+    st.markdown("- 「人工知能の研究者を探しています」")
+    st.markdown("- 「がん治療の専門家はいますか？」")
+    st.markdown("- 「量子コンピューティングの論文を書いている人」")
+    st.markdown("- 「環境問題に取り組む研究者」")
+    
+    st.markdown("### 🔗 より詳細な検索")
+    st.markdown("詳細なフィルタリングや統計情報をご覧になりたい場合は、**🔍 Researcher Search**をご利用ください。")
     
     st.markdown("---")
-    st.markdown(f"## {get_text('context_info')}")
     
-    context_items = [
-        ("研究分野", st.session_state.user_context.get("research_field", "")),
-        ("技術課題", st.session_state.user_context.get("technical_challenge", "")),
-        ("協業タイプ", st.session_state.user_context.get("collaboration_type", "")),
-        ("予算規模", st.session_state.user_context.get("budget_range", "")),
-        ("期間", st.session_state.user_context.get("timeline", ""))
-    ]
+    # チャット履歴管理
+    st.markdown("## ⚡ クイックアクション")
     
-    for label, value in context_items:
-        if value:
-            st.markdown(f"**{label}:** {value}")
-    
-    # チャットリセット
-    if st.button(get_text('reset_chat'), type="secondary"):
-        # 初期メッセージを言語に応じて設定
-        if st.session_state.language == "日本語":
-            initial_message = "こんにちは！研Q対話型エージェントです。🎓\n\n企業様の研究ニーズに最適な海外研究者をお探しいたします。何でもお気軽にご質問ください！"
-        else:
-            initial_message = "Hello! Welcome to KenQ Chat Agent. 🎓\n\nWe help you find the best overseas researchers for your corporate research needs. Please feel free to ask any questions!"
-        
-        st.session_state.chat_history = [{
-            "role": "assistant",
-            "content": initial_message,
-            "timestamp": datetime.now().isoformat(),
-            "researchers": []
-        }]
-        st.session_state.user_context = {
-            "research_field": "",
-            "technical_challenge": "",
-            "collaboration_type": "",
-            "budget_range": "",
-            "timeline": "",
-            "company_info": ""
-        }
-        # カウンターリセットで入力フィールドも新しく生成
-        st.session_state.message_counter += 1
+    # チャット履歴をクリア
+    if st.button("🗑️ チャット履歴をクリア", use_container_width=True):
+        st.session_state.messages = [
+            {
+                "role": "assistant", 
+                "content": "こんにちは！研究者マッチングのお手伝いをします。どのような研究分野や専門性をお探しですか？"
+            }
+        ]
         st.rerun()
     
     st.markdown("---")
-    st.markdown(f"## {get_text('placeholder_function')}")
-    st.markdown(f"**現在の提案:** {dynamic_placeholder[:50]}...")
-    if st.session_state.language == "日本語":
-        st.caption("会話の流れに応じて入力例が自動で変わります")
-    else:
-        st.caption("Input examples change automatically based on conversation flow")
     
-    st.markdown("---")
-    st.markdown(f"## {get_text('usage_tips')}")
-    if st.session_state.language == "日本語":
-        st.markdown("""
-        - 研究分野や技術課題を具体的に
-        - 協業の目的を明確に
-        - 予算や期間の希望があれば
-        - 企業の業界や規模も参考になります
-        """)
-    else:
-        st.markdown("""
-        - Be specific about research fields and technical challenges
-        - Clarify collaboration objectives
-        - Include budget and timeline preferences if available
-        - Company industry and size information is also helpful
-        """)
-    
-    st.markdown("---")
-    st.markdown(f"## {get_text('debug_info')}")
-    with st.expander("詳細情報" if st.session_state.language == "日本語" else "Details"):
-        st.json({
-            "API_BASE_URL": API_BASE_URL,
-            "chat_history_length": len(st.session_state.chat_history),
-            "context_keys": list(st.session_state.user_context.keys()),
-            "current_placeholder": dynamic_placeholder,
-            "message_counter": st.session_state.message_counter,
-            "max_researchers": st.session_state.max_researchers,
-            "language": st.session_state.language
-        })
+    # システム情報
+    st.markdown("## 📊 システム情報")
+    st.markdown("- **データベース**: Harvard研究者データ")
+    st.markdown("- **インデックス**: harvard-index-v6")
+    st.markdown("- **検索エンジン**: Azure AI Search")
+    st.markdown("- **AI**: Azure OpenAI")

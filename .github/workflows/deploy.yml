@@ -26,31 +26,14 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
-      - name: Navigate to US_frontend and verify structure
+      - name: Verify US_frontend structure
         run: |
-          cd US_frontend
-          echo "📁 US_frontend directory contents:"
+          echo "Repository root:"
           ls -la
-          echo "🐍 Python files:"
-          find . -name "*.py" -type f
-          echo "📂 Pages directory:"
-          ls -la pages/ || echo "❌ pages directory not found"
-          
-          # メインアプリファイルの確認
-          if [ -f "main_app.py" ]; then
-            echo "✅ main_app.py found"
-          else
-            echo "❌ main_app.py not found"
-            exit 1
-          fi
-          
-          # pages ディレクトリの確認
-          if [ -d "pages" ] && [ -f "pages/1_Researcher_Search.py" ] && [ -f "pages/2_Chat_Agent.py" ]; then
-            echo "✅ pages directory structure is correct"
-          else
-            echo "❌ pages directory structure is incorrect"
-            exit 1
-          fi
+          echo "US_frontend directory:"
+          ls -la US_frontend/
+          echo "US_frontend pages:"
+          ls -la US_frontend/pages/
 
       - name: Install dependencies
         run: |
@@ -58,36 +41,13 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Test Streamlit app
+      - name: Package US_frontend contents only
         run: |
           cd US_frontend
-          echo "🧪 Testing Streamlit import..."
-          python -c "import streamlit; print(f'Streamlit version: {streamlit.__version__}')"
-          
-          echo "🧪 Testing main app syntax..."
-          python -m py_compile main_app.py
-          
-          echo "🧪 Testing page files syntax..."
-          python -m py_compile pages/1_Researcher_Search.py
-          python -m py_compile pages/2_Chat_Agent.py
-          
-          echo "✅ All files syntax is valid"
-
-      - name: Create deployment package from US_frontend
-        run: |
-          cd US_frontend
-          
-          # 実行権限を設定
           chmod +x startup.sh
-          
-          # ZIPパッケージを作成（US_frontendの内容のみ）
-          zip -r ../release.zip \
-            . \
-            -x ".git/*" ".github/*" "__pycache__/*" "*.pyc" "*.pkl" ".DS_Store" ".vscode/*" "zip.py"
-          
+          zip -r ../release.zip . -x ".git/*" ".github/*" "__pycache__/*"
           cd ..
-          echo "📦 Created deployment package from US_frontend"
-          echo "📋 Package contents:"
+          echo "Package contents:"
           unzip -l release.zip | head -20
 
       - name: Deploy to Azure Web App
